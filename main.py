@@ -18,6 +18,21 @@ load_dotenv()
 
 app = FastAPI()
 
+# Aux
+def convert_numpy_types(obj):
+    """
+    Recursively convert numpy types to native Python types.
+    """
+    if isinstance(obj, dict):
+        return {k: convert_numpy_types(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy_types(i) for i in obj]
+    elif isinstance(obj, np.generic):
+        return obj.item()
+    elif isinstance(obj, float) and (np.isnan(obj) or np.isinf(obj)):
+        return None
+    else:
+        return obj
 
 # Data Models
 class TrainRequest(BaseModel):
@@ -153,7 +168,7 @@ def predict_realtime(input: PredictRequest):
         raise HTTPException(status_code=500, detail=f"Prediction failed: {e}")
 
     return {
-        "features": features,
+        "features": convert_numpy_types(features),
         "prediction": int(prediction),
         "prediction_proba": float(prediction_proba) if prediction_proba is not None else None
     }
@@ -235,5 +250,5 @@ def predict_batch(input: PredictBatchRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Prediction failed: {e}")
 
-    results = feature_df.to_dict(orient="records")
+    results = convert_numpy_types(feature_df.to_dict(orient="records"))
     return {"results": results}
