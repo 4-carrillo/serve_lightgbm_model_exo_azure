@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from scipy.stats import skew, kurtosis
-from astropy.stats import LombScargle
+from astropy.timeseries import LombScargle
 import lightkurve as lk
 from tqdm import tqdm
 
