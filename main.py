@@ -255,6 +255,12 @@ def predict_batch(input: PredictBatchRequest):
     try:
         logger.info("Extracting features from dataset")
         feature_df = create_feature_dataset_in_batches(df, batch_size=5)
+
+        kicids = feature_df['kicid'].copy()
+        feature_df = feature_df.drop(columns=['kicid'])
+
+        if 'kicid' in feature_df.columns:
+            feature_df = feature_df.drop(columns=['kicid'])
         logger.info(f"Feature data extracted with shape: {feature_df.shape}")
     except Exception as e:
         logger.error(f"Feature extraction failed: {e}")
@@ -306,6 +312,7 @@ def predict_batch(input: PredictBatchRequest):
         logger.error(f"Prediction failed: {e}")
         raise HTTPException(status_code=500, detail=f"Prediction failed: {e}")
 
+    feature_df['kicid'] = kicids.values
     results = convert_numpy_types(feature_df.to_dict(orient="records"))
     logger.info("Returning prediction results")
     return {"results": results}
