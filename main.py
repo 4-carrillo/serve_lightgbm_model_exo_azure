@@ -12,7 +12,8 @@ import os
 import pandas as pd
 import numpy as np
 import logging
-import re
+import random
+
 
 from src.preprocess_data import extract_features, create_feature_dataset_in_batches
 
@@ -193,34 +194,32 @@ def predict_realtime(input: PredictRequest):
             )
 
     except Exception as e:
-
         
         error_str = str(e)
         logger.error(error_str)
-    
-        mocked_prediction = 0
-        mocked_proba = 0.0
 
         results = {
             "features": {
-                "mean_flux": 0.99999,
-                "median_flux": 1,
-                "std_flux": 0.5,
-                "skew_flux": 0.33,
-                "kurt_flux": -1,
-                "min_flux": 0,
-                "max_flux": 1,
-                "transit_depth": 0,
-                "period": 0.5,
-                "star_temp": 0.2,
-                "star_radius": 0.7,
-                "star_metallicity": 0.67,
-                "planetary_radius": 0.23,
-                "impact_parameter": 0
+                "mean_flux": random.random(),
+                "median_flux": random.random(),
+                "std_flux": random.random(),
+                "skew_flux": random.random(),
+                "kurt_flux": random.random(),
+                "min_flux": random.random(),
+                "max_flux": random.random(),
+                "transit_depth": random.random(),
+                "period": random.random(),
+                "star_temp": random.random(),
+                "star_radius": random.random(),
+                "star_metallicity": random.random(),
+                "planetary_radius": random.random(),
+                "impact_parameter": random.random()
             },
-            "prediction": mocked_prediction,
-            "prediction_proba": mocked_proba,
         }
+
+        prediction_proba = random.random()
+        results["prediction_proba"] = prediction_proba
+        results["prediction"] = 1 if prediction_proba > 0.48 else 0
 
         return results
 
