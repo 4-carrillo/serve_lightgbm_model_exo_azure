@@ -8,10 +8,16 @@ from fastapi.responses import JSONResponse
 
 app = FastAPI()
 
+
 # Data Models
 class TrainRequest(BaseModel):
     model_type: str
     params: Dict
+
+# Endpoints
+@app.get("/")
+def read_root():
+    return {"Health": "Ok"}
 
 @app.post("/trainer")
 def trainer(request: TrainRequest):
