@@ -4,7 +4,7 @@ import os
 import io
 from azure.storage.blob import BlobServiceClient
 import joblib
-from aux_train_model import *
+from src.train_model.aux_train_model import *
 
 def save_model_to_azure(pipeline, model_type):
     account_url = os.getenv("AZURE_ACCOUNT_URL")
