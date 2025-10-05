@@ -9,6 +9,7 @@ from azure.storage.blob import BlobServiceClient
 from io import BytesIO
 import os
 import pandas as pd
+import numpy as np
 
 from src.preprocess_data import extract_features, create_feature_dataset_in_batches
 
