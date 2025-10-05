@@ -1,20 +1,34 @@
 import lightgbm as lgb
 import xgboost as xgb
 from catboost import CatBoostClassifier
-from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Dropout
 from tensorflow.keras.optimizers import Adam
 import numpy as np
 import pandas as pd
+import os
+
+
+from azure.storage.blob import BlobServiceClient
+
 
 def load_train():
-    # Example:
-    # df = pd.read_csv("your_data.csv")
-    # X = df.drop("target", axis=1)
-    # y = df["target"]
-    pass
+
+    account_url = os.getenv("AZURE_ACCOUNT_URL")
+    sas_token = os.getenv("AZURE_SAS_TOKEN")
+    container_name = "artifacts"
+    blob_path = "data/train_feature_df.csv"
+
+    if not account_url or not sas_token:
+        raise ValueError("Missing AZURE_ACCOUNT_URL or AZURE_SAS_TOKEN environment variable.")
+
+    # Construct full blob URL with SAS token
+    blob_url = f"{account_url}/{container_name}/{blob_path}?{sas_token}"
+
+    # Load CSV using pandas
+    df = pd.read_csv(blob_url)
+    return df
 
 # -----------------------------
 # LGBM - Handles NaNs

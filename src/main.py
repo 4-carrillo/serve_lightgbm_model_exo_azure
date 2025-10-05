@@ -1,15 +1,37 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from azure.storage.blob import BlobServiceClient
-import joblib
+from typing import Dict
+import numpy as np
 import os
-import pandas as pd
-
-from preprocess_data import extract_features
-
+from train_model.train_model import train_model
+from fastapi.responses import JSONResponse
 
 app = FastAPI()
 
+# Data Models
+class TrainRequest(BaseModel):
+    model_type: str
+    params: Dict
+
+@app.post("/trainer")
+def trainer(request: TrainRequest):
+    model_type = request.model_type.lower()
+    params = request.params
+
+    try:
+        train_model(model_type, params)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return JSONResponse(
+            status_code=200,
+            content={"message": f"{model_type.upper()} model trained and saved successfully."}
+        )
+
+
+
+# DEPRECATED
+"""
 class InputData(BaseModel):
     id: int
     mission: str
@@ -29,13 +51,15 @@ def load_model():
         download_file.write(blob_client.download_blob().readall())
 
     model = joblib.load(local_model_path)
-    
+
 class InputData(BaseModel):
     id: int
     mission: str = "Kepler"
     planet_star_radius_ratio: float | None = None
     a_by_rstar: float | None = None
     inclination_deg: float | None = None
+
+
 
 @app.post("/predict")
 def predict(data: InputData):
@@ -64,3 +88,4 @@ def predict(data: InputData):
         "features": {k: (None if pd.isna(v) else v) for k, v in features.items()}
     }
     return result
+"""

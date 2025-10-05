@@ -6,9 +6,9 @@ on:
       - main  # or your deployment branch
 
 env:
-  AZURE_WEBAPP_NAME: <your-webapp-name>
-  AZURE_REGISTRY: <your-acr-name>.azurecr.io
-  IMAGE_NAME: <your-image-name>
+  AZURE_WEBAPP_NAME: serve-exo-ai-models
+  AZURE_REGISTRY: exopacr.azurecr.io
+  IMAGE_NAME: acr_exo_ai_model
 
 jobs:
   build-and-deploy:

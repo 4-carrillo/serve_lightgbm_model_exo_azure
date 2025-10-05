@@ -1,12 +1,36 @@
-import pandas as pd
-import numpy as np
+import numpy as np 
+from sklearn.pipeline import Pipeline
+import os
+import io
+from azure.storage.blob import BlobServiceClient
+import joblib
 from aux_train_model import *
+
+def save_model_to_azure(pipeline, model_type):
+    account_url = os.getenv("AZURE_ACCOUNT_URL")
+    sas_token = os.getenv("AZURE_SAS_TOKEN")
+    container_name = "artifacts"
+    blob_path = f"models/{model_type}_model.joblib"
+
+    if not account_url or not sas_token:
+        raise ValueError("Missing AZURE_ACCOUNT_URL or AZURE_SAS_TOKEN environment variable.")
+
+    # Create blob service and blob client
+    blob_service_client = BlobServiceClient(account_url=account_url, credential=sas_token)
+    blob_client = blob_service_client.get_blob_client(container=container_name, blob=blob_path)
+
+    # Serialize the pipeline to bytes
+    with io.BytesIO() as bytes_io:
+        joblib.dump(pipeline, bytes_io)
+        bytes_io.seek(0)
+        blob_client.upload_blob(bytes_io, overwrite=True)
+
+    print(f"Model saved to Azure Blob Storage at: {blob_path}")
 
 
 def train_model(
         model_type, 
-        params, 
-        azure_upload=False,
+        params,
 ):
     
     train_set = load_train()
@@ -18,41 +42,20 @@ def train_model(
     )
     y = train_set["target"]
     
-    # Train model
-    if model_type == 'xgb':
-        model = train_xgb(params, X, y)
-
-    elif model_type == 'catboost':
-        model = train_catboost(params, X, y)
-
-    elif model_type == 'lgbm':
-        model = train_lgbm(params, X, y)
-
-    elif model_type == 'nn':
+    if model_type == 'nn':
         model, scaler = train_nn(params, X, y)
-        # Save both model and scaler if needed
+        pipeline = Pipeline([
+            ('scaler', scaler),
+            ('model', model)
+        ])
     else:
-        raise ValueError(f"Unknown model type: {model_type}")
+        model = {
+            'xgb': train_xgb,
+            'catboost': train_catboost,
+            'lgbm': train_lgbm
+        }[model_type](params, X, y)
+        pipeline = model
 
-    # Save and upload to Azure
-    if azure_upload:
-        # Create temp file
-        with tempfile.TemporaryDirectory() as tmpdir:
-            model_path = os.path.join(tmpdir, f"{model_name or model_type}_model.pkl")
+    save_model_to_azure(pipeline, model_type)
 
-            # Save model using joblib (or keras saving for NN)
-            if model_type == 'nn':
-                model_path = os.path.join(tmpdir, f"{model_name or model_type}_model.keras")
-                model.save(model_path)  # save keras model
-            else:
-                joblib.dump(model, model_path)
-
-            # Upload
-            upload_to_azure_blob(
-                local_file_path=model_path,
-                container_name=container_name,
-                blob_name=os.path.basename(model_path),
-                connection_string=connection_string
-            )
-
-    return (model, scaler) if model_type == 'nn' else model
+    return None
