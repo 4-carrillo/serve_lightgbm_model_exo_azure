@@ -1,9 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Dict
-import numpy as np
-import os
-from train_model.train_model import train_model
+from src.train_model.train_model import train_model
 from fastapi.responses import JSONResponse
 
 app = FastAPI()
