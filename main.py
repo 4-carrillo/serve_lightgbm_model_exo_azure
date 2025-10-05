@@ -100,11 +100,15 @@ def trainer(request: TrainRequest):
 
 @app.post("/predict-realtime")
 def predict_realtime(input: PredictRequest):
-
     model_type = input.model_type.lower()
-    if model_type not in models:
+    
+    # Special handling for ensemble
+    is_ensemble = model_type == "ensemble"
+    
+    if not is_ensemble and model_type not in models:
         raise HTTPException(status_code=404, detail=f"Model '{model_type}' is not loaded.")
 
+    # Extract features
     features = extract_features(
         kicid=input.kicid,
         mission=input.mission,
@@ -115,15 +119,36 @@ def predict_realtime(input: PredictRequest):
 
     feature_df = pd.DataFrame([features])
 
-    model = models[model_type]
-
     try:
-        prediction = model.predict(feature_df)[0]
-        prediction_proba = (
-            model.predict_proba(feature_df)[0][1]
-            if hasattr(model, "predict_proba")
-            else None
-        )
+        if is_ensemble:
+            required_models = ["xgb", "lgbm", "catboost", "nn"]
+            missing_models = [m for m in required_models if m not in models]
+            if missing_models:
+                raise HTTPException(status_code=500, detail=f"Missing models for ensemble: {missing_models}")
+            
+            probs = []
+            for m in required_models:
+                model = models[m]
+                proba = (
+                    model.predict_proba(feature_df)[0][1]
+                    if hasattr(model, "predict_proba")
+                    else model.predict(feature_df)[0]  # fallback
+                )
+                probs.append(proba)
+
+            # Average probabilities
+            prediction_proba = sum(probs) / len(probs)
+            prediction = int(prediction_proba >= 0.5)
+
+        else:
+            model = models[model_type]
+            prediction = model.predict(feature_df)[0]
+            prediction_proba = (
+                model.predict_proba(feature_df)[0][1]
+                if hasattr(model, "predict_proba")
+                else None
+            )
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Prediction failed: {e}")
 
@@ -134,10 +159,13 @@ def predict_realtime(input: PredictRequest):
     }
 
 
+
 @app.post("/predict-batch")
 def predict_batch(input: PredictBatchRequest):
     model_type = input.model_type.lower()
-    if model_type not in models:
+    is_ensemble = model_type == "ensemble"
+
+    if not is_ensemble and model_type not in models:
         raise HTTPException(status_code=404, detail=f"Model '{model_type}' is not loaded.")
 
     account_url = os.getenv("AZURE_ACCOUNT_URL")
@@ -147,6 +175,7 @@ def predict_batch(input: PredictBatchRequest):
     if not account_url or not sas_token:
         raise HTTPException(status_code=500, detail="Missing Azure credentials")
 
+    # Load CSV from Azure Blob Storage
     blob_service = BlobServiceClient(account_url=account_url, credential=sas_token)
     blob_client = blob_service.get_blob_client(container=container_name, blob=input.csv_blob_path)
 
@@ -161,18 +190,50 @@ def predict_batch(input: PredictBatchRequest):
 
     df = df.rename(columns={'id': 'kicid'})
 
+    # Extract features
     feature_df = create_feature_dataset_in_batches(df, batch_size=5)
 
-    model = models[model_type]
     try:
-        preds = model.predict(feature_df)
-        probas = model.predict_proba(feature_df)[:, 1] if hasattr(model, "predict_proba") else [None] * len(preds)
+        if is_ensemble:
+            required_models = ["xgb", "lgbm", "catboost", "nn"]
+            missing_models = [m for m in required_models if m not in models]
+            if missing_models:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Missing models for ensemble: {missing_models}"
+                )
+
+            # Collect probabilities from all models
+            all_probas = []
+            for m in required_models:
+                model = models[m]
+                if hasattr(model, "predict_proba"):
+                    probas = model.predict_proba(feature_df)[:, 1]
+                else:
+                    # fallback for models that don't support predict_proba
+                    probas = model.predict(feature_df)
+                all_probas.append(probas)
+
+            # Stack and average
+            avg_probas = np.mean(np.column_stack(all_probas), axis=1)
+            preds = (avg_probas >= 0.5).astype(int)
+
+            feature_df["prediction"] = preds
+            feature_df["prediction_proba"] = avg_probas
+
+        else:
+            model = models[model_type]
+            preds = model.predict(feature_df)
+            probas = (
+                model.predict_proba(feature_df)[:, 1]
+                if hasattr(model, "predict_proba")
+                else [None] * len(preds)
+            )
+            feature_df["prediction"] = preds
+            feature_df["prediction_proba"] = probas
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Prediction failed: {e}")
 
-    feature_df["prediction"] = preds
-    feature_df["prediction_proba"] = probas
-
     results = feature_df.to_dict(orient="records")
-
     return {"results": results}
