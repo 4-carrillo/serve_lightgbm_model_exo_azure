@@ -4,6 +4,7 @@ from typing import Optional
 from typing import Dict
 from src.train_model.train_model import train_model
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 import joblib
 from azure.storage.blob import BlobServiceClient
 from io import BytesIO
@@ -18,6 +19,15 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = FastAPI()
+# CORS Middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
+
 
 # Aux
 def convert_numpy_types(obj):
@@ -35,14 +45,17 @@ def convert_numpy_types(obj):
     else:
         return obj
 
+
 # Data Models
 class TrainRequest(BaseModel):
     model_type: str
     params: Dict
 
+
 class DataInput(BaseModel):
     id: str
     model_type: str
+
 
 class PredictRequest(BaseModel):
     kicid: str
@@ -57,8 +70,10 @@ class PredictBatchRequest(BaseModel):
     csv_blob_path: str
     model_type: str
 
+
 # Start
 models = {}
+
 
 @app.on_event("startup")
 def load_models():
@@ -72,7 +87,9 @@ def load_models():
         raise RuntimeError("Missing AZURE_ACCOUNT_URL or AZURE_SAS_TOKEN.")
 
     # Connect to the blob service
-    blob_service_client = BlobServiceClient(account_url=account_url, credential=sas_token)
+    blob_service_client = BlobServiceClient(
+        account_url=account_url, credential=sas_token
+    )
     container_client = blob_service_client.get_container_client(container_name)
 
     # List all blobs under the "models/" folder
@@ -94,10 +111,12 @@ def load_models():
 
     print("All models loaded:", list(models.keys()))
 
+
 # Endpoints
 @app.get("/")
 def read_root():
     return {"Health": "Ok"}
+
 
 @app.post("/trainer")
 def trainer(request: TrainRequest):
@@ -110,19 +129,24 @@ def trainer(request: TrainRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
     return JSONResponse(
-            status_code=200,
-            content={"message": f"{model_type.upper()} model trained and saved successfully."}
-        )
+        status_code=200,
+        content={
+            "message": f"{model_type.upper()} model trained and saved successfully."
+        },
+    )
+
 
 @app.post("/predict-realtime")
 def predict_realtime(input: PredictRequest):
     model_type = input.model_type.lower()
-    
+
     # Special handling for ensemble
     is_ensemble = model_type == "ensemble"
-    
+
     if not is_ensemble and model_type not in models:
-        raise HTTPException(status_code=404, detail=f"Model '{model_type}' is not loaded.")
+        raise HTTPException(
+            status_code=404, detail=f"Model '{model_type}' is not loaded."
+        )
 
     # Extract features
     features = extract_features(
@@ -130,7 +154,7 @@ def predict_realtime(input: PredictRequest):
         mission=input.mission,
         planet_star_radius_ratio=input.planet_star_radius_ratio,
         a_by_rstar=input.a_by_rstar,
-        inclination_deg=input.inclination_deg
+        inclination_deg=input.inclination_deg,
     )
 
     feature_df = pd.DataFrame([features])
@@ -140,8 +164,11 @@ def predict_realtime(input: PredictRequest):
             required_models = ["xgb", "lgbm", "catboost", "nn"]
             missing_models = [m for m in required_models if m not in models]
             if missing_models:
-                raise HTTPException(status_code=500, detail=f"Missing models for ensemble: {missing_models}")
-            
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Missing models for ensemble: {missing_models}",
+                )
+
             probs = []
             for m in required_models:
                 model = models[m]
@@ -171,9 +198,10 @@ def predict_realtime(input: PredictRequest):
     return {
         "features": convert_numpy_types(features),
         "prediction": int(prediction),
-        "prediction_proba": float(prediction_proba) if prediction_proba is not None else None
+        "prediction_proba": (
+            float(prediction_proba) if prediction_proba is not None else None
+        ),
     }
-
 
 
 @app.post("/predict-batch")
@@ -182,7 +210,9 @@ def predict_batch(input: PredictBatchRequest):
     is_ensemble = model_type == "ensemble"
 
     if not is_ensemble and model_type not in models:
-        raise HTTPException(status_code=404, detail=f"Model '{model_type}' is not loaded.")
+        raise HTTPException(
+            status_code=404, detail=f"Model '{model_type}' is not loaded."
+        )
 
     account_url = os.getenv("AZURE_ACCOUNT_URL")
     sas_token = os.getenv("AZURE_SAS_TOKEN")
@@ -193,7 +223,9 @@ def predict_batch(input: PredictBatchRequest):
 
     # Load CSV from Azure Blob Storage
     blob_service = BlobServiceClient(account_url=account_url, credential=sas_token)
-    blob_client = blob_service.get_blob_client(container=container_name, blob=input.csv_blob_path)
+    blob_client = blob_service.get_blob_client(
+        container=container_name, blob=input.csv_blob_path
+    )
 
     try:
         blob_data = blob_client.download_blob().readall()
@@ -201,10 +233,12 @@ def predict_batch(input: PredictBatchRequest):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Could not load CSV: {e}")
 
-    if 'id' not in df.columns or 'mission' not in df.columns:
-        raise HTTPException(status_code=400, detail="CSV must contain 'id' and 'mission' columns")
+    if "id" not in df.columns or "mission" not in df.columns:
+        raise HTTPException(
+            status_code=400, detail="CSV must contain 'id' and 'mission' columns"
+        )
 
-    df = df.rename(columns={'id': 'kicid'})
+    df = df.rename(columns={"id": "kicid"})
 
     # Extract features
     feature_df = create_feature_dataset_in_batches(df, batch_size=5)
@@ -216,7 +250,7 @@ def predict_batch(input: PredictBatchRequest):
             if missing_models:
                 raise HTTPException(
                     status_code=500,
-                    detail=f"Missing models for ensemble: {missing_models}"
+                    detail=f"Missing models for ensemble: {missing_models}",
                 )
 
             # Collect probabilities from all models
