@@ -79,6 +79,7 @@ pyerfa==2.0.1.5
 Pygments==2.19.2
 pyparsing==3.2.5
 python-dateutil==2.9.0.post0
+python-dotenv==1.1.1
 python-multipart==0.0.20
 pytz==2025.2
 pyvo==1.7

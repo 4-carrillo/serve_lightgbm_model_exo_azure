@@ -3,6 +3,9 @@ from pydantic import BaseModel
 from typing import Dict
 from src.train_model.train_model import train_model
 from fastapi.responses import JSONResponse
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI()
 
